@@ -1,6 +1,7 @@
 use crate::{minesweeper::MineSweeper, solver::Solver};
 
 mod minesweeper;
+mod point;
 mod solver;
 
 fn main() {
@@ -10,10 +11,12 @@ fn main() {
     let mines = area / 5;
     let ms = MineSweeper::new(width, height, mines).unwrap();
     let mut solver = Solver::new(ms);
-    solver.display_delay = 0;
-    solver.show_map_steps = false;
-
+    solver.set_step_delay(0);
+    solver.set_show_map_steps(false);
+    // solver.display_delay = 0;
+    // solver.show_map_steps = false;
+    //
     solver.solve();
-
-    println!("{}", solver.game);
+    //
+    println!("{}", solver.game());
 }

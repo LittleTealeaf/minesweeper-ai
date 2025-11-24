@@ -1,97 +1,65 @@
 use std::{
     collections::{HashMap, HashSet},
     error::Error,
-    fmt::{Debug, Display},
-    iter::once,
+    fmt::Display,
 };
 
-use itertools::chain;
 use rand::random;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Point {
-    pub x: usize,
-    pub y: usize,
-}
+use crate::point::Point;
 
-impl Display for Point {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.x, self.y)
-    }
-}
-
-impl Point {
-    pub fn new(x: usize, y: usize) -> Self {
-        Self { x, y }
-    }
-
-    /**
-     * Returns the furthest coordinate distance
-     */
-    pub fn dist(&self, other: &Point) -> usize {
-        self.x.abs_diff(other.x).max(self.y.abs_diff(other.y))
-    }
-
-    pub fn neighbors(&self) -> impl Iterator<Item = Point> {
-        chain!(
-            [
-                Point::new(self.x + 1, self.y),
-                Point::new(self.x, self.y + 1),
-                Point::new(self.x + 1, self.y + 1),
-            ]
-            .into_iter(),
-            (self.x > 0)
-                .then(|| [
-                    Point::new(self.x - 1, self.y),
-                    Point::new(self.x - 1, self.y + 1),
-                ])
-                .into_iter()
-                .flatten(),
-            (self.y > 0)
-                .then(|| [
-                    Point::new(self.x, self.y - 1),
-                    Point::new(self.x + 1, self.y - 1)
-                ])
-                .into_iter()
-                .flatten(),
-            (self.y > 0 && self.x > 0)
-                .then(|| once(Point::new(self.x - 1, self.y - 1)))
-                .into_iter()
-                .flatten()
-        )
-    }
-}
-
-impl From<(usize, usize)> for Point {
-    fn from((x, y): (usize, usize)) -> Self {
-        Self::new(x, y)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tile {
+    Empty,
     Mine,
-    Blank,
-    Warn(usize),
+    Hint(usize),
     Flag,
 }
 
 impl Display for Tile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Tile::Empty => write!(f, "_"),
             Tile::Mine => write!(f, "M"),
-            Tile::Blank => write!(f, "_"),
-            Tile::Warn(n) => write!(f, "{n}"),
+            Tile::Hint(i) => write!(f, "{i}"),
             Tile::Flag => write!(f, "F"),
         }
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GameStatus {
+    New,
+    InProgress,
+    Win,
+    Loss,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GameAction {
+    Reveal(Point),
+    Flag(Point),
+    Unflag(Point),
+    ToggleFlag(Point),
+}
+
+impl Display for GameAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GameAction::Reveal(point) => write!(f, "Reveal {point}"),
+            GameAction::Flag(point) => write!(f, "Flag {point}"),
+            GameAction::Unflag(point) => write!(f, "Unflag {point}"),
+            GameAction::ToggleFlag(point) => write!(f, "Toggle Flag {point}"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MineSweeper {
     width: usize,
     height: usize,
     mine_count: usize,
-    game_status: GameStatus,
+    status: GameStatus,
     mines: HashSet<Point>,
     flags: HashSet<Point>,
     revealed: HashMap<Point, Tile>,
@@ -102,9 +70,9 @@ impl Display for MineSweeper {
         for y in 0..self.height {
             for x in 0..self.width {
                 let p = Point::new(x, y);
-                if self.revealed.contains_key(&p) {
-                    write!(f, "{}", self.get_tile(p).unwrap())?;
-                } else if self.flagged().contains(&p) {
+                if let Some(tile) = self.revealed.get(&p) {
+                    write!(f, "{tile}")?;
+                } else if self.flags.contains(&p) {
                     write!(f, "F")?;
                 } else {
                     write!(f, ".")?;
@@ -117,27 +85,23 @@ impl Display for MineSweeper {
 }
 
 impl MineSweeper {
-    pub fn new(
-        width: usize,
-        height: usize,
-        mine_count: usize,
-    ) -> Result<Self, NewMinesweeperError> {
+    pub fn new(width: usize, height: usize, mines: usize) -> Result<Self, NewMinesweeperError> {
         if width == 0 {
             return Err(NewMinesweeperError::InvalidWidth);
         } else if height == 0 {
             return Err(NewMinesweeperError::InvalidHeight);
-        } else if (height * width) < mine_count {
+        } else if (height * width) < mines {
             return Err(NewMinesweeperError::TooManyMines {
                 area: height * width,
-                mines: mine_count,
+                mines,
             });
         }
 
         Ok(Self {
             height,
             width,
-            game_status: GameStatus::Blank,
-            mine_count,
+            status: GameStatus::New,
+            mine_count: mines,
             mines: HashSet::new(),
             flags: HashSet::new(),
             revealed: HashMap::new(),
@@ -152,8 +116,12 @@ impl MineSweeper {
         self.height
     }
 
-    pub fn all_points(&self) -> impl Iterator<Item = Point> {
-        (0..self.width).flat_map(|x| (0..self.height).map(move |y| Point::new(x, y)))
+    pub fn status(&self) -> &GameStatus {
+        &self.status
+    }
+
+    pub fn points(&self) -> impl Iterator<Item = Point> {
+        Point::iter_range(0, self.width(), 0, self.height())
     }
 
     pub fn revealed(&self) -> &HashMap<Point, Tile> {
@@ -164,132 +132,84 @@ impl MineSweeper {
         &self.flags
     }
 
-    pub fn is_valid_point(&self, coord: Point) -> bool {
-        coord.x < self.width && coord.y < self.height
+    pub fn flag_point(&mut self, point: Point) -> bool {
+        self.flags.insert(point)
     }
 
-    pub fn get_status(&self) -> GameStatus {
-        self.game_status
+    pub fn unflag_point(&mut self, point: &Point) -> bool {
+        self.flags.remove(point)
     }
 
-    pub fn is_in_progress(&self) -> bool {
-        matches!(self.game_status, GameStatus::InProgress)
-    }
-
-    fn generate(&mut self, starting_point: Point) {
-        if !self.mines.is_empty() {
-            return;
-        }
+    fn generate_mines(&mut self, starting_point: &Point) {
         while self.mines.len() < self.mine_count {
             let p = Point::new(
                 random::<usize>() % self.width,
                 random::<usize>() % self.height,
             );
-            if p.dist(&starting_point) > 1 {
+            if p.dist_max(starting_point) > 1 {
                 self.mines.insert(p);
             }
         }
     }
 
-    fn get_tile(&self, point: Point) -> Option<Tile> {
-        if !self.is_valid_point(point) {
-            return None;
-        }
-        if self.flags.contains(&point) {
-            Some(Tile::Flag)
-        } else if self.mines.contains(&point) {
-            Some(Tile::Mine)
+    fn get_tile(&self, point: &Point) -> Tile {
+        if self.flags.contains(point) {
+            Tile::Flag
+        } else if self.mines.contains(point) {
+            Tile::Mine
         } else {
             let count = point.neighbors().filter(|p| self.mines.contains(p)).count();
             if count == 0 {
-                Some(Tile::Blank)
+                Tile::Empty
             } else {
-                Some(Tile::Warn(count))
+                Tile::Hint(count)
             }
         }
     }
 
-    /**
-     * Returns `true` if the game is still finished, false if the game ends
-     */
-    pub fn reveal(&mut self, point: Point) {
-        if matches!(self.get_status(), GameStatus::Blank) {
-            self.generate(point);
-            self.game_status = GameStatus::InProgress;
+    pub fn reveal(&mut self, point: Point) -> bool {
+        if matches!(self.status, GameStatus::New) {
+            self.generate_mines(&point);
+            self.status = GameStatus::InProgress
         }
 
-        if let Some(tile) = self.get_tile(point) {
-            self.revealed.insert(point, tile);
-            match tile {
-                Tile::Mine => {
-                    self.game_status = GameStatus::Lost;
-                }
-                Tile::Blank => {
-                    let mut stack = vec![];
-                    stack.extend(point.neighbors());
-                    while let Some(p) = stack.pop() {
-                        if self.revealed.contains_key(&p) {
-                            continue;
-                        }
-                        if let Some(tile) = self.get_tile(p) {
-                            self.revealed.insert(p, tile);
-                            if let Tile::Blank = tile {
-                                stack.extend(p.neighbors().filter(|p| self.is_valid_point(*p)));
-                            }
-                        }
-                    }
-                }
+        let mut changes = false;
 
+        let mut stack = vec![point];
+        while let Some(p) = stack.pop() {
+            if self.revealed.contains_key(&p) {
+                continue;
+            }
+
+            let tile = self.get_tile(&p);
+            match &tile {
+                Tile::Mine => self.status = GameStatus::Loss,
+                Tile::Empty => {
+                    stack.extend(p.neighbors());
+                }
                 _ => {}
             }
+            changes = true;
+            self.revealed.insert(p, tile);
         }
 
-        if self.revealed().len() + self.flagged().len() == self.width * self.height {
-            self.game_status = GameStatus::Completed;
-        }
+        changes
     }
 
-    pub fn toggle_flag(&mut self, point: Point) -> bool {
-        if self.revealed.contains_key(&point) {
-            return false;
+    pub fn perform_action(&mut self, action: GameAction) -> bool {
+        match self.status {
+            GameStatus::Win | GameStatus::Loss => {
+                return false;
+            }
+            _ => {}
         }
-
-        if self.flags.contains(&point) {
-            self.flags.remove(&point);
-        } else {
-            self.flags.insert(point);
-        }
-        true
-    }
-
-    pub fn action(&mut self, action: GameAction) -> bool {
         match action {
-            GameAction::Reveal(point) => {
-                let revealed_before = self.revealed.len();
-                self.reveal(point);
-                let revealed_after = self.revealed.len();
-                revealed_after > revealed_before
-            }
-            GameAction::ToggleFlag(point) => {
-                self.toggle_flag(point);
-                self.flagged().contains(&point)
-            }
+            GameAction::Reveal(point) => self.reveal(point),
+            GameAction::Flag(point) => self.flag_point(point),
+            GameAction::Unflag(point) => self.unflag_point(&point),
+            GameAction::ToggleFlag(point) => self.unflag_point(&point) || self.flag_point(point),
         }
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum GameStatus {
-    InProgress,
-    Completed,
-    Lost,
-    Blank,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum GameAction {
-    Reveal(Point),
-    ToggleFlag(Point),
 }
 
 #[derive(Debug)]
