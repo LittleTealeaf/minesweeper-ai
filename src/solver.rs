@@ -1,11 +1,6 @@
-use std::{
-    collections::{HashMap, HashSet},
-    iter::{empty, once},
-    thread,
-    time::Duration,
-};
+use std::{thread, time::Duration};
 
-use itertools::{Itertools, chain};
+use itertools::Itertools;
 
 use crate::minesweeper::{GameAction, MineSweeper, Point, Tile};
 
@@ -67,7 +62,7 @@ impl Solver {
             })
     }
 
-    fn get_unknown_neighbors<'a>(&self, point: &'a Point) -> impl Iterator<Item = Point> {
+    fn get_unknown_neighbors(&self, point: &Point) -> impl Iterator<Item = Point> {
         point
             .neighbors()
             .filter(|p| !(self.game.revealed().contains_key(p) | self.game.flagged().contains(p)))
