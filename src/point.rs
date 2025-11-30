@@ -4,8 +4,8 @@ use itertools::chain;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Point {
-    x: usize,
-    y: usize,
+    pub x: usize,
+    pub y: usize,
 }
 
 impl Display for Point {
@@ -57,5 +57,33 @@ impl Point {
                 .into_iter()
                 .flatten()
         )
+    }
+
+    pub fn below(&self) -> Self {
+        Self {
+            x: self.x,
+            y: self.y + 1,
+        }
+    }
+
+    pub fn above(&self) -> Option<Self> {
+        (self.y > 0).then(|| Self {
+            x: self.x,
+            y: self.y - 1,
+        })
+    }
+
+    pub fn left(&self) -> Option<Self> {
+        (self.x > 0).then(|| Self {
+            x: self.x - 1,
+            y: self.y,
+        })
+    }
+
+    pub fn right(&self) -> Self {
+        Self {
+            x: self.x + 1,
+            y: self.y,
+        }
     }
 }

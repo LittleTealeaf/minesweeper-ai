@@ -23,19 +23,31 @@ impl<'a> SolveState<'a> {
         }
     }
 
-    pub fn add_flag(&'a mut self, point: Point) {
-        self.flags.insert(point);
+    pub fn add_flags(&mut self, points: impl IntoIterator<Item = Point>) -> bool {
+        let count = self.flags.len();
+        self.flags.extend(points);
+        count != self.flags.len()
     }
 
-    pub fn add_safe(&'a mut self, point: Point) {
-        self.safe.insert(point);
+    pub fn add_flag(&mut self, point: Point) -> bool {
+        self.flags.insert(point)
     }
 
-    pub fn flags(&'a self) -> impl Iterator<Item = &'a Point> {
+    pub fn add_safe(&mut self, point: Point) -> bool {
+        self.safe.insert(point)
+    }
+
+    pub fn add_safes(&mut self, safes: impl IntoIterator<Item = Point>) -> bool {
+        let count = self.safe.len();
+        self.safe.extend(safes);
+        count != self.safe.len()
+    }
+
+    pub fn flags(&self) -> impl Iterator<Item = &Point> {
         self.flags.iter().chain(self.game.flagged().iter())
     }
 
-    pub fn revealed(&'a self) -> impl Iterator<Item = (Point, Tile)> {
+    pub fn revealed(&self) -> impl Iterator<Item = (Point, Tile)> {
         self.game
             .revealed()
             .clone()
@@ -43,7 +55,7 @@ impl<'a> SolveState<'a> {
             .chain(self.safe.iter().map(|point| (*point, Tile::Empty)))
     }
 
-    pub fn is_revealed(&'a self, point: &Point) -> bool {
+    pub fn is_revealed(&self, point: &Point) -> bool {
         self.safe.contains(point) || self.game.revealed().contains_key(point)
     }
 
@@ -51,10 +63,15 @@ impl<'a> SolveState<'a> {
         self.flags.contains(point) || self.game.flagged().contains(point)
     }
 
-    pub fn to_actions(&self) -> impl Iterator<Item = GameAction> {
+    pub fn is_valid(&self) -> bool {
+        self.get_game_hints()
+            .all(|(point, count)| count >= point.neighbors().filter(|p| self.is_flag(p)).count())
+    }
+
+    pub fn into_actions(self) -> impl Iterator<Item = GameAction> {
         chain!(
-            self.flags.iter().map(|p| GameAction::Flag(*p)),
-            self.safe.iter().map(|p| GameAction::Reveal(*p))
+            self.flags.into_iter().map(GameAction::Flag),
+            self.safe.into_iter().map(GameAction::Reveal)
         )
     }
 

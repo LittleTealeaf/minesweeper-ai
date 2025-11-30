@@ -13,8 +13,6 @@ fn main() {
     let mut solver = Solver::new(ms);
     solver.set_step_delay(0);
     solver.set_show_map_steps(false);
-    // solver.display_delay = 0;
-    // solver.show_map_steps = false;
     //
     solver.solve();
     //

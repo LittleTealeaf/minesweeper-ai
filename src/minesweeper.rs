@@ -124,6 +124,10 @@ impl MineSweeper {
         Point::iter_range(0, self.width(), 0, self.height())
     }
 
+    pub fn is_valid_point(&self, point: &Point) -> bool {
+        point.x < self.width && point.y < self.height
+    }
+
     pub fn revealed(&self) -> &HashMap<Point, Tile> {
         &self.revealed
     }
@@ -185,7 +189,11 @@ impl MineSweeper {
             match &tile {
                 Tile::Mine => self.status = GameStatus::Loss,
                 Tile::Empty => {
-                    stack.extend(p.neighbors());
+                    for pn in p.neighbors() {
+                        if self.is_valid_point(&pn) && !stack.contains(&pn) {
+                            stack.push(pn);
+                        }
+                    }
                 }
                 _ => {}
             }

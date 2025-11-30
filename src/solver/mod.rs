@@ -1,4 +1,5 @@
 pub mod gamestate;
+mod solve_static;
 
 use std::{thread, time::Duration};
 
@@ -7,6 +8,7 @@ use itertools::Itertools;
 use crate::{
     minesweeper::{GameAction, GameStatus, MineSweeper, Tile},
     point::Point,
+    solver::gamestate::SolveState,
 };
 
 pub struct Solver {
@@ -52,39 +54,6 @@ impl Solver {
     }
 }
 
-/** Helper Functions */
-impl Solver {
-    fn get_frontier(&self) -> impl Iterator<Item = (Point, usize)> {
-        self.get_game_hints().filter_map(|(point, n)| {
-            let count = point
-                .neighbors()
-                .filter(|n| self.game.flagged().contains(n))
-                .count();
-            if n > count {
-                Some((point, n - count))
-            } else {
-                None
-            }
-        })
-    }
-
-    fn get_game_hints(&self) -> impl Iterator<Item = (Point, usize)> {
-        self.game
-            .revealed()
-            .iter()
-            .filter_map(|(point, tile)| match tile {
-                Tile::Hint(n) => Some((*point, *n)),
-                _ => None,
-            })
-    }
-
-    fn get_unknown_neighbors(&self, point: &Point) -> impl Iterator<Item = Point> {
-        point
-            .neighbors()
-            .filter(|p| !(self.game.revealed().contains_key(p) || self.game.flagged().contains(p)))
-    }
-}
-
 impl Solver {
     pub fn solve(&mut self) {
         if matches!(self.game.status(), crate::minesweeper::GameStatus::New) {
@@ -96,13 +65,12 @@ impl Solver {
 
         while matches!(self.game.status(), GameStatus::InProgress) {
             let mut changed = false;
-            println!("hi");
 
-            for action in self.flag_known_points().collect_vec() {
-                changed |= self.game_action(action);
-            }
+            let mut solve_state = SolveState::from_game(&self.game);
 
-            for action in self.reveal_known_safes().collect_vec() {
+            solve_state.static_solve();
+
+            for action in solve_state.into_actions().collect_vec() {
                 changed |= self.game_action(action);
             }
 
@@ -110,60 +78,5 @@ impl Solver {
                 break;
             }
         }
-    }
-}
-
-/** Definitive Solving Methods */
-impl Solver {
-    fn flag_known_points(&self) -> impl Iterator<Item = GameAction> {
-        self.get_frontier()
-            .filter_map(|(p, count)| {
-                // check the number of flags to the count
-                if count
-                    == p.neighbors()
-                        .filter(|n| self.game.flagged().contains(n))
-                        .count()
-                {
-                    Some(
-                        p.neighbors()
-                            .collect_vec()
-                            .into_iter()
-                            .filter(|l| {
-                                !(self.game.flagged().contains(l)
-                                    || self.game.revealed().contains_key(l))
-                            })
-                            .map(GameAction::Reveal),
-                    )
-                } else {
-                    None
-                }
-            })
-            .flatten()
-    }
-
-    fn reveal_known_safes(&self) -> impl Iterator<Item = GameAction> {
-        self.get_game_hints()
-            .filter_map(|(p, count)| {
-                // check the number of flags to the count
-                if count
-                    == p.neighbors()
-                        .filter(|n| self.game.flagged().contains(n))
-                        .count()
-                {
-                    Some(
-                        p.neighbors()
-                            .collect_vec()
-                            .into_iter()
-                            .filter(|l| {
-                                !(self.game.flagged().contains(l)
-                                    || self.game.revealed().contains_key(l))
-                            })
-                            .map(GameAction::Reveal),
-                    )
-                } else {
-                    None
-                }
-            })
-            .flatten()
     }
 }
