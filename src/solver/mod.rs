@@ -1,4 +1,4 @@
-pub mod search;
+pub mod gamestate;
 
 use std::{thread, time::Duration};
 
