@@ -8,7 +8,7 @@ use rand::random;
 
 use crate::point::Point;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Tile {
     Empty,
     Mine,

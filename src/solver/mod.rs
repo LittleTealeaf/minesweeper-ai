@@ -1,3 +1,5 @@
+pub mod search;
+
 use std::{thread, time::Duration};
 
 use itertools::Itertools;
