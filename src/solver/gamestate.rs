@@ -96,9 +96,12 @@ impl<'a> SolveState<'a> {
         })
     }
 
+    pub fn get_neighbors(&self, point: &Point) -> impl Iterator<Item = Point> {
+        point.neighbors().filter(|p| self.game.is_valid_point(p))
+    }
+
     pub fn get_unknown_neighbors(&self, point: &Point) -> impl Iterator<Item = Point> {
-        point
-            .neighbors()
+        self.get_neighbors(point)
             .filter(|p| !(self.is_revealed(p) || self.is_flag(p)))
     }
 }
