@@ -1,5 +1,3 @@
-use std::iter::empty;
-
 use itertools::Itertools;
 
 use crate::{point::Point, solver::gamestate::SolveState};
